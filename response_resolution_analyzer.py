@@ -1,7 +1,3 @@
-"""
-Performs response and resolution time analysis on GitHub issues.
-"""
-
 from typing import List
 from datetime import datetime
 import numpy as np
@@ -13,25 +9,12 @@ import config
 
 
 class ResponseResolutionAnalyzer:
-    """
-    Analyzes issue response and resolution times.
-    """
-
     def __init__(self):
-        """
-        Constructor
-        """
-        # Optional: can be filtered by user/label if needed later
         self.USER = config.get_parameter('user')
         self.LABEL = config.get_parameter('label')
 
-    # -------------------------------------------------------------
-    # Main entrypoint
-    # -------------------------------------------------------------
+
     def run(self):
-        """
-        Executes the analysis and produces plots + summary statistics.
-        """
         issues: List[Issue] = DataLoader().get_issues()
 
         response_times = self.get_first_response_times(issues)
@@ -41,13 +24,7 @@ class ResponseResolutionAnalyzer:
         self.plot_response_time_histogram(response_times)
         self.plot_response_vs_resolution_scatter(response_times, resolution_times)
 
-    # -------------------------------------------------------------
-    # Core Computations
-    # -------------------------------------------------------------
     def get_first_response_times(self, issues):
-        """
-        Computes time (in hours) between issue creation and first non-creator comment event.
-        """
         response_times = {}
         for issue in issues:
             if not hasattr(issue, "events") or not issue.events:
@@ -73,9 +50,6 @@ class ResponseResolutionAnalyzer:
         return response_times
 
     def get_resolution_times(self, issues):
-        """
-        Computes time (in hours) from issue creation to closing.
-        """
         resolution_times = {}
         for issue in issues:
             created_time = getattr(issue, "created_date", None)
@@ -88,13 +62,7 @@ class ResponseResolutionAnalyzer:
 
         return resolution_times
 
-    # -------------------------------------------------------------
-    # Output and Visualization
-    # -------------------------------------------------------------
     def print_summary_statistics(self, response_times, resolution_times):
-        """
-        Prints summary statistics for response and resolution times.
-        """
         def summary(title, data):
             print(f"\n--- {title} ---")
             if not data:
@@ -111,9 +79,6 @@ class ResponseResolutionAnalyzer:
         summary("Resolution Time Summary", resolution_times)
 
     def plot_response_time_histogram(self, response_times, bins=None):
-        """
-        Plots histogram of first response times.
-        """
         if not response_times:
             print("No response time data to plot.")
             return
@@ -129,9 +94,6 @@ class ResponseResolutionAnalyzer:
         plt.show()
 
     def plot_response_vs_resolution_scatter(self, response_times, resolution_times):
-        """
-        Scatter plot comparing response time vs resolution time.
-        """
         common = set(response_times.keys()) & set(resolution_times.keys())
         if not common:
             print("No overlapping data for scatter plot.")
