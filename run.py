@@ -9,6 +9,8 @@ import argparse
 
 import config
 from example_analysis import ExampleAnalysis
+from data_loader import DataLoader
+from contributor_activity_analyzer import ContributorActivityAnalyzer
 
 
 def parse_args():
@@ -43,12 +45,16 @@ def parse_args():
 args = parse_args()
 # Add arguments to config so that they can be accessed in other parts of the application
 config.overwrite_from_args(args)
+
+#Load data
+loader = DataLoader()
+issues = loader.get_issues()
     
 # Run the feature specified in the --feature flag
 if args.feature == 0:
     ExampleAnalysis().run()
-elif args.feature == 1:
-    pass # TODO call first analysis
+elif args.feature == 1:    
+    ContributorActivityAnalyzer().run()
 elif args.feature == 2:
     pass # TODO call second analysis
 elif args.feature == 3:
