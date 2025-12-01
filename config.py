@@ -1,15 +1,30 @@
 import logging
-logger = logging.getLogger(__name__)
-
 import json
 import os
+from datetime import datetime
 
-'''
+logger = logging.getLogger(__name__)
+
+"""
 Handles the loading of the config file as well as the access of specific
 config parameters.
-'''
+
+Also maintains explicit globals for:
+- START_DATE
+- END_DATE
+- LABEL_FILTER
+- STATE_FILTER
+
+These are what DataLoader uses for filtering.
+"""
 
 _config = None
+
+# ---- Filter globals (used directly by DataLoader) ----
+START_DATE = None       # datetime or None
+END_DATE = None         # datetime or None
+LABEL_FILTER = None     # str or None
+STATE_FILTER = None     # str or None
 
 
 def _init_config(path=None):
@@ -19,11 +34,10 @@ def _init_config(path=None):
 
     filepath = _get_default_path()
     if filepath is None:
-        logger.info('Initializing empty config')
+        logger.info("Initializing empty config")
         _config = {}
-
     else:
-        with open(filepath, 'r') as fin:
+        with open(filepath, "r") as fin:
             _config = json.loads(fin.read())
 
 
@@ -36,9 +50,12 @@ def _get_default_path():
     basepath = os.getcwd()
     filename = "config.json"
     prev_path = None
-    while (basepath != prev_path) and not os.path.isfile(os.path.abspath(os.path.join(basepath, filename))):
+    while (
+        basepath != prev_path
+        and not os.path.isfile(os.path.abspath(os.path.join(basepath, filename)))
+    ):
         prev_path = basepath
-        basepath = os.path.abspath(os.path.join(basepath, '..'))
+        basepath = os.path.abspath(os.path.join(basepath, ".."))
 
     if basepath == prev_path:
         logger.info("Could not find config file.")
@@ -61,7 +78,7 @@ def get_parameter(parameter_name, default=None):
             value = value[5:]
         return convert_to_typed_value(value)
     if parameter_name not in _config:
-        if default:
+        if default is not None:
             return default
         logger.info(f"Config parameter {parameter_name} is not specified")
         return None
@@ -85,7 +102,7 @@ def convert_to_typed_value(value):
             # We only need to convert string values
             # Others are already in their target type
             return value
-    except:
+    except Exception:
         # if the above doesn't work, it's a string
         return value
 
@@ -102,22 +119,56 @@ def set_parameter(name, value):
         os.environ[name] = "json:{0}".format(json.dumps(value))
 
 
+def _parse_date(v):
+    """
+    Parse a date string like 'YYYY-MM-DD' or an ISO datetime string
+    into a datetime, or return None.
+    """
+    if not v:
+        return None
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, str):
+        try:
+            # Plain date
+            if len(v) == 10 and v[4] == "-" and v[7] == "-":
+                return datetime.fromisoformat(v)
+            # Anything else ISO-like
+            return datetime.fromisoformat(v)
+        except Exception:
+            return None
+    return None
+
+
 def overwrite_from_args(args):
     """
-    Writes command line paramters into the config so any parameter
-    can be accessed the same way through the config. It adds any parameters
-    that are missing and overwrites parameters that already exist.
-    """
-    try:
-        for name, value in vars(args).iteritems():
-            if value is not None:
-                set_parameter(name, value)
-    except:
-        pass
+    Writes command line parameters into the config so any parameter
+    can be accessed the same way through the config AND updates
+    the explicit filter globals:
 
+    - START_DATE, END_DATE (as datetime or None)
+    - LABEL_FILTER, STATE_FILTER
+    """
+    global START_DATE, END_DATE, LABEL_FILTER, STATE_FILTER
+
+    # 1) Keep original behavior: write everything into "config" via env vars
     try:
         for name, value in vars(args).items():
             if value is not None:
                 set_parameter(name, value)
-    except:
+    except Exception:
         pass
+
+    # 2) Explicitly set filter globals used by DataLoader
+    sd = getattr(args, "start_date", None)
+    ed = getattr(args, "end_date", None)
+    LABEL_FILTER = getattr(args, "label", None)
+    STATE_FILTER = getattr(args, "state", None)
+
+    START_DATE = _parse_date(sd)
+    END_DATE = _parse_date(ed)
+
+    logger.info(
+        f"Filters updated -> START_DATE={START_DATE}, "
+        f"END_DATE={END_DATE}, LABEL_FILTER={LABEL_FILTER}, STATE_FILTER={STATE_FILTER}"
+    )

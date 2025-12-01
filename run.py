@@ -2,10 +2,8 @@
 Starting point of the application.
 """
 import argparse
-from datetime import datetime
 
 import config
-from example_analysis import ExampleAnalysis
 from content_text_analyzer import ContentTextAnalyzer
 from label_analyzer import LabelAnalyzer
 from contributor_activity_analyzer import ContributorActivityAnalyzer
@@ -16,21 +14,43 @@ def parse_args():
     """Parses CLI args for non-interactive runs."""
     ap = argparse.ArgumentParser("run.py")
 
-    ap.add_argument('--feature', '-f', type=int, required=True,
-                    help='Which feature to run (1–5)')
-    ap.add_argument('--start_date', type=str, required=False,
-                    help='Start date (YYYY-MM-DD)')
-    ap.add_argument('--end_date', type=str, required=False,
-                    help='End date (YYYY-MM-DD)')
-    ap.add_argument('--label', '-l', type=str, required=False,
-                    help='Optional label filter')
-    ap.add_argument('--state', type=str, required=False,
-                    help='Filter by issue state (open or closed)')
+    ap.add_argument(
+        "--feature",
+        "-f",
+        type=int,
+        required=True,
+        help="Which feature to run (1–5)",
+    )
+    ap.add_argument(
+        "--start_date",
+        type=str,
+        required=False,
+        help="Start date (YYYY-MM-DD)",
+    )
+    ap.add_argument(
+        "--end_date",
+        type=str,
+        required=False,
+        help="End date (YYYY-MM-DD)",
+    )
+    ap.add_argument(
+        "--label",
+        "-l",
+        type=str,
+        required=False,
+        help="Optional label filter (e.g. kind/bug, area/installer)",
+    )
+    ap.add_argument(
+        "--state",
+        type=str,
+        required=False,
+        help="Filter by issue state (open or closed)",
+    )
     return ap.parse_args()
 
 
 def interactive_mode():
-    """Interactive selection of feature and optional filters."""
+    """Interactive selection of feature and optional filters (strings for config)."""
     print("\n=== Interactive Analyzer Runner ===")
     print("1️⃣  Contributor Activity Analysis")
     print("2️⃣  Response & Resolution Analysis")
@@ -38,30 +58,27 @@ def interactive_mode():
     print("4️⃣  Label Analysis")
     print("5️⃣  Combined Report (All Analyses)")
 
-    while True:
+    feature = None
+    while feature not in [1, 2, 3, 4, 5]:
         try:
             feature = int(input("Enter choice (1–5): ").strip())
-            if feature in [1, 2, 3, 4, 5]:
-                break
         except ValueError:
-            pass
-        print("Invalid input. Please enter 1–5.")
+            feature = None
+        if feature not in [1, 2, 3, 4, 5]:
+            print("Invalid input. Please enter a number from 1 to 5.")
 
     start_date = input("Start date (YYYY-MM-DD) or leave blank: ").strip()
     end_date = input("End date (YYYY-MM-DD) or leave blank: ").strip()
     label = input("Filter by label (e.g. kind/bug) or leave blank: ").strip()
     state = input("Filter by state (open/closed) or leave blank: ").strip()
 
-    start_date = datetime.fromisoformat(start_date) if start_date else None
-    end_date = datetime.fromisoformat(end_date) if end_date else None
-
-    return {
-        "feature": feature,
-        "start_date": start_date,
-        "end_date": end_date,
-        "label": label or None,
-        "state": state or None
-    }
+    return argparse.Namespace(
+        feature=feature,
+        start_date=start_date or None,
+        end_date=end_date or None,
+        label=label or None,
+        state=state or None,
+    )
 
 
 if __name__ == "__main__":
@@ -69,11 +86,12 @@ if __name__ == "__main__":
     mode = input("Run in interactive mode? (y/n): ").strip().lower()
 
     if mode == "y":
-        args_dict = interactive_mode()
-        args = argparse.Namespace(**args_dict)
+        args = interactive_mode()
     else:
         args = parse_args()
-        config.overwrite_from_args(args)
+
+    # Push all args into config so DataLoader + analyzers see filters
+    config.overwrite_from_args(args)
 
     feature = args.feature
 
@@ -105,13 +123,12 @@ if __name__ == "__main__":
     elif feature == 5:
         print("\n📊 Running Combined Report (All Analyses)...")
 
-        # Sequentially run all analyzers
         ca = ContributorActivityAnalyzer()
         rra = ResponseResolutionAnalyzer()
         cta = ContentTextAnalyzer()
         la = LabelAnalyzer()
 
-        # Each analyzer loads data via DataLoader
+        # Each analyzer loads data via DataLoader, respecting config filters
         ca.run()
         rra.run()
         cta.run()
@@ -119,13 +136,17 @@ if __name__ == "__main__":
 
         # Merge results for the unified PDF
         combined_report = cta.report_data.copy()
-        combined_report.update({
-            "Contributor Activity": getattr(ca, "report_data", {}),
-            "Response & Resolution": getattr(rra, "report_data", {}),
-            "Label: Kind Counts": la.report_data.get("Label: Kind Counts", {}),
-            "Label: Area Counts": la.report_data.get("Label: Area Counts", {}), 
-            "Label: Prefix Breakdown": la.report_data.get("Label: Prefix Breakdown", {})
-        })
+        combined_report.update(
+            {
+                "Contributor Activity": getattr(ca, "report_data", {}),
+                "Response & Resolution": getattr(rra, "report_data", {}),
+                "Label: Kind Counts": la.report_data.get("Label: Kind Counts", {}),
+                "Label: Area Counts": la.report_data.get("Label: Area Counts", {}),
+                "Label: Prefix Breakdown": la.report_data.get(
+                    "Label: Prefix Breakdown", {}
+                ),
+            }
+        )
 
         # Combine chart images
         all_charts = []
@@ -133,10 +154,12 @@ if __name__ == "__main__":
             if hasattr(a, "chart_paths"):
                 all_charts.extend(a.chart_paths)
 
-        # Export unified PDF
         from pdf_report_exporter import PDFReportExporter
+
         PDFReportExporter("Combined Project Analysis Report").export(
-            combined_report, chart_paths=all_charts, filename="combined_analysis_report.pdf"
+            combined_report,
+            chart_paths=all_charts,
+            filename="combined_analysis_report.pdf",
         )
         print("\n✅ Combined Analysis Report Generated as combined_analysis_report.pdf")
 
